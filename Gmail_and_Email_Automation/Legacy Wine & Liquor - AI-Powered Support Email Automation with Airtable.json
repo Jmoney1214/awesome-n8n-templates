@@ -1,0 +1,616 @@
+{
+  "name": "Legacy Wine & Liquor - AI-Powered Support Email Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "labelIds": [
+            "INBOX"
+          ],
+          "q": "to:Support@legacywineandliquor.com"
+        },
+        "format": "resolved"
+      },
+      "id": "gmail-trigger-1",
+      "name": "Gmail Trigger - Support Inbox",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "1",
+          "name": "Gmail OAuth2"
+        }
+      },
+      "notes": "Monitors Support@LegacyWineAndLiquor.com for new emails in real-time"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and clean email data\nconst items = $input.all();\nconst cleanedItems = [];\n\nfor (const item of items) {\n  const data = item.json;\n  \n  // Extract email content\n  const subject = data.subject || '';\n  const from = data.from || '';\n  const body = data.textPlain || data.textHtml || '';\n  const threadId = data.threadId || '';\n  const messageId = data.id || '';\n  const timestamp = data.internalDate || new Date().getTime();\n  \n  // Clean HTML from body\n  let cleanBody = body\n    .replace(/<[^>]*>/g, ' ')  // Remove HTML tags\n    .replace(/&nbsp;/g, ' ')    // Replace HTML spaces\n    .replace(/&amp;/g, '&')     // Decode ampersands\n    .replace(/&lt;/g, '<')      // Decode less than\n    .replace(/&gt;/g, '>')      // Decode greater than\n    .replace(/\\s+/g, ' ')       // Normalize whitespace\n    .trim();\n  \n  // Extract sender name and email\n  const senderMatch = from.match(/(.+?)\\s*<(.+?)>/) || [null, from, from];\n  const senderName = senderMatch[1]?.trim() || from;\n  const senderEmail = senderMatch[2]?.trim() || from;\n  \n  cleanedItems.push({\n    json: {\n      subject,\n      sender_name: senderName,\n      sender_email: senderEmail,\n      body_text: cleanBody,\n      body_full: body,\n      thread_id: threadId,\n      message_id: messageId,\n      timestamp: new Date(parseInt(timestamp)).toISOString(),\n      raw_data: data\n    }\n  });\n}\n\nreturn cleanedItems;"
+      },
+      "id": "cleanup-node-2",
+      "name": "Text Cleanup & Extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ],
+      "notes": "Strips HTML, decodes body, extracts sender info and key metadata"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract key information using regex patterns\nconst items = $input.all();\nconst extractedItems = [];\n\nfor (const item of items) {\n  const subject = item.json.subject || '';\n  const body = item.json.body_text || '';\n  const fullText = `${subject} ${body}`;\n  \n  // Order number patterns (various formats)\n  const orderPatterns = [\n    /order\\s*#?\\s*([A-Z0-9-]{5,20})/gi,\n    /order\\s*number\\s*:?\\s*([A-Z0-9-]{5,20})/gi,\n    /confirmation\\s*#?\\s*([A-Z0-9-]{5,20})/gi,\n    /#([A-Z0-9-]{8,20})/g\n  ];\n  \n  let orderNumbers = [];\n  orderPatterns.forEach(pattern => {\n    const matches = [...fullText.matchAll(pattern)];\n    orderNumbers = orderNumbers.concat(matches.map(m => m[1]));\n  });\n  \n  // Remove duplicates\n  orderNumbers = [...new Set(orderNumbers)];\n  \n  // Platform detection\n  const platforms = {\n    doordash: /doordash|door\\s*dash/gi,\n    ubereats: /uber\\s*eats|ubereats/gi,\n    grubhub: /grubhub|grub\\s*hub/gi,\n    cityhive: /cityhive|city\\s*hive/gi,\n    postmates: /postmates|post\\s*mates/gi,\n    instacart: /instacart/gi,\n    direct: /direct\\s*order|website\\s*order/gi\n  };\n  \n  let detectedPlatform = 'Unknown';\n  for (const [platform, pattern] of Object.entries(platforms)) {\n    if (pattern.test(fullText)) {\n      detectedPlatform = platform.charAt(0).toUpperCase() + platform.slice(1);\n      break;\n    }\n  }\n  \n  // Keyword detection\n  const keywords = {\n    pickup: /pick\\s*up|pickup|collecting/gi,\n    delivery: /deliver|delivery|delivered/gi,\n    shipping: /ship|shipping|shipped/gi,\n    refund: /refund|money\\s*back/gi,\n    missing: /missing|didn't\\s*receive|not\\s*received/gi,\n    damaged: /damaged|broken|smashed/gi,\n    late: /late|delayed|waiting/gi,\n    wrong: /wrong|incorrect|mistake/gi\n  };\n  \n  let detectedKeywords = [];\n  for (const [keyword, pattern] of Object.entries(keywords)) {\n    if (pattern.test(fullText)) {\n      detectedKeywords.push(keyword);\n    }\n  }\n  \n  extractedItems.push({\n    json: {\n      ...item.json,\n      order_numbers: orderNumbers,\n      detected_platform: detectedPlatform,\n      keywords: detectedKeywords,\n      full_text_for_ai: fullText.substring(0, 3000) // Limit for AI\n    }\n  });\n}\n\nreturn extractedItems;"
+      },
+      "id": "regex-node-3",
+      "name": "Regex Extractor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        650,
+        300
+      ],
+      "notes": "Extracts order numbers, platform names, and key issue keywords"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an email classification AI for Legacy Wine & Liquor. Analyze the following email and extract structured information.\n\n**EMAIL DATA:**\nSubject: {{ $json.subject }}\nFrom: {{ $json.sender_name }} ({{ $json.sender_email }})\nDetected Platform: {{ $json.detected_platform }}\nOrder Numbers: {{ $json.order_numbers.join(', ') || 'None' }}\nKeywords: {{ $json.keywords.join(', ') || 'None' }}\n\n**EMAIL CONTENT:**\n{{ $json.full_text_for_ai }}\n\n---\n\n**INSTRUCTIONS:**\nClassify this email into the following structure. Return ONLY valid JSON:\n\n```json\n{\n  \"category\": \"Order|Support|Other\",\n  \"subcategory\": \"Pickup|Delivery|Shipping|Missing|Damaged|Refund|Account|General|Other\",\n  \"platform_standardized\": \"DoorDash|UberEats|Grubhub|CityHive|Postmates|Instacart|Direct|Unknown\",\n  \"order_number\": \"extracted order number or null\",\n  \"priority\": \"Low|Medium|High|Urgent\",\n  \"issue_summary\": \"Brief 1-line summary\",\n  \"issue_detail\": \"Detailed description of the customer's issue\",\n  \"sentiment\": \"Positive|Neutral|Negative|Angry\",\n  \"requires_urgent_attention\": true/false,\n  \"suggested_action\": \"What should be done next\"\n}\n```\n\n**PRIORITY RULES:**\n- Urgent: Angry customer, severe problem, refund request, damaged/missing expensive items\n- High: Time-sensitive issues, delivery problems, wrong orders\n- Medium: General questions, status inquiries\n- Low: Thank you messages, general feedback\n\n**IMPORTANT:** Extract the most specific order number found. Standardize platform names."
+            }
+          ]
+        },
+        "options": {
+          "temperature": 0.3,
+          "maxTokens": 1000
+        },
+        "jsonOutput": true
+      },
+      "id": "openai-node-4",
+      "name": "AI Classification (OpenAI)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "2",
+          "name": "OpenAI API"
+        }
+      },
+      "notes": "Uses GPT-4o-mini to classify and structure email data. Can swap for Claude if preferred."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI response and merge with existing data\nconst items = $input.all();\nconst mergedItems = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const originalData = items[i].json;\n  let aiResponse = {};\n  \n  try {\n    // Try to parse AI response from message content\n    const content = items[i].json.choices?.[0]?.message?.content || \n                   items[i].json.content || \n                   items[i].json.output || \n                   '{}';\n    \n    // Remove markdown code blocks if present\n    const cleanedContent = content.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n    aiResponse = JSON.parse(cleanedContent);\n  } catch (e) {\n    console.error('Failed to parse AI response:', e);\n    // Fallback defaults\n    aiResponse = {\n      category: 'Other',\n      subcategory: 'Other',\n      platform_standardized: originalData.detected_platform || 'Unknown',\n      order_number: originalData.order_numbers?.[0] || null,\n      priority: 'Medium',\n      issue_summary: 'Failed to classify',\n      issue_detail: 'AI classification failed',\n      sentiment: 'Neutral',\n      requires_urgent_attention: false,\n      suggested_action: 'Manual review required'\n    };\n  }\n  \n  mergedItems.push({\n    json: {\n      // Original email data\n      thread_id: originalData.thread_id,\n      message_id: originalData.message_id,\n      timestamp: originalData.timestamp,\n      subject: originalData.subject,\n      sender_name: originalData.sender_name,\n      sender_email: originalData.sender_email,\n      body_text: originalData.body_text,\n      \n      // AI Classification\n      category: aiResponse.category,\n      subcategory: aiResponse.subcategory,\n      platform_standardized: aiResponse.platform_standardized,\n      order_number: aiResponse.order_number,\n      priority: aiResponse.priority,\n      issue_summary: aiResponse.issue_summary,\n      issue_detail: aiResponse.issue_detail,\n      sentiment: aiResponse.sentiment,\n      requires_urgent_attention: aiResponse.requires_urgent_attention,\n      suggested_action: aiResponse.suggested_action,\n      \n      // Status tracking\n      status: 'New',\n      assigned_to: null,\n      resolved: false,\n      created_at: new Date().toISOString(),\n      updated_at: new Date().toISOString()\n    }\n  });\n}\n\nreturn mergedItems;"
+      },
+      "id": "merge-node-5",
+      "name": "Merge AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        300
+      ],
+      "notes": "Parses AI JSON response and merges with email data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.sender_name }}",
+              "rightValue": "DoorDash",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "leftValue": "={{ $json.sender_name }}",
+              "rightValue": "UberEats",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "leftValue": "={{ $json.sender_name }}",
+              "rightValue": "Grubhub",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "leftValue": "={{ $json.sender_email }}",
+              "rightValue": "@doordash.com",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "leftValue": "={{ $json.sender_email }}",
+              "rightValue": "@uber.com",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "leftValue": "={{ $json.sender_email }}",
+              "rightValue": "@grubhub.com",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            }
+          ],
+          "combineOperation": "all"
+        }
+      },
+      "id": "filter-node-6",
+      "name": "Filter Platform Notifications",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        300
+      ],
+      "notes": "Excludes automated system notifications from delivery platforms"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "__rl": true,
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Support Tickets",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Thread ID": "={{ $json.thread_id }}",
+            "Message ID": "={{ $json.message_id }}",
+            "Timestamp": "={{ $json.timestamp }}",
+            "Subject": "={{ $json.subject }}",
+            "Customer Name": "={{ $json.sender_name }}",
+            "Customer Email": "={{ $json.sender_email }}",
+            "Category": "={{ $json.category }}",
+            "Subcategory": "={{ $json.subcategory }}",
+            "Platform": "={{ $json.platform_standardized }}",
+            "Order Number": "={{ $json.order_number }}",
+            "Priority": "={{ $json.priority }}",
+            "Issue Summary": "={{ $json.issue_summary }}",
+            "Issue Detail": "={{ $json.issue_detail }}",
+            "Sentiment": "={{ $json.sentiment }}",
+            "Urgent": "={{ $json.requires_urgent_attention }}",
+            "Suggested Action": "={{ $json.suggested_action }}",
+            "Status": "={{ $json.status }}",
+            "Assigned To": "={{ $json.assigned_to }}",
+            "Resolved": "={{ $json.resolved }}",
+            "Created At": "={{ $json.created_at }}",
+            "Updated At": "={{ $json.updated_at }}"
+          }
+        },
+        "options": {
+          "bulkSize": 10
+        },
+        "mergeField": "Thread ID"
+      },
+      "id": "airtable-node-7",
+      "name": "Upsert to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        300
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "3",
+          "name": "Airtable Token"
+        }
+      },
+      "notes": "Upserts records to Airtable using Thread ID as unique key"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "addLabels",
+        "messageId": "={{ $json.message_id }}",
+        "labelIds": [
+          "={{ $json.category === 'Order' ? 'LW/Order' : ($json.category === 'Support' ? 'LW/Support' : 'LW/Other') }}"
+        ]
+      },
+      "id": "gmail-label-8",
+      "name": "Apply Gmail Label",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1650,
+        300
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "1",
+          "name": "Gmail OAuth2"
+        }
+      },
+      "notes": "Applies category-based labels to Gmail messages"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "channel": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "id"
+        },
+        "text": "=📨 **New Support Ticket** ({{ $json.priority }} Priority)\n\n**Platform:** {{ $json.platform_standardized }}\n**Category:** {{ $json.category }} - {{ $json.subcategory }}\n**Order #:** {{ $json.order_number || 'N/A' }}\n**Sentiment:** {{ $json.sentiment }}\n{{ $json.requires_urgent_attention ? '⚠️ **URGENT ATTENTION REQUIRED**' : '' }}\n\n**Issue:**\n{{ $json.issue_summary }}\n\n**From:** {{ $json.sender_name }} ({{ $json.sender_email }})\n\n**Suggested Action:**\n{{ $json.suggested_action }}\n\n<https://mail.google.com/mail/#search/{{ $json.thread_id }}|📧 Open in Gmail>\n<YOUR_AIRTABLE_VIEW_URL{{ $json.thread_id }}|📊 View in Airtable>",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "slack-node-9",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1850,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "4",
+          "name": "Slack API"
+        }
+      },
+      "notes": "Posts formatted notification to #support-intake channel"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "urgent-check",
+              "leftValue": "={{ $json.priority }}",
+              "rightValue": "Urgent",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "urgent-filter-10",
+      "name": "Check if Urgent",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        500
+      ],
+      "notes": "Routes urgent tickets for additional notification"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "channel": {
+          "__rl": true,
+          "value": "YOUR_URGENT_SLACK_CHANNEL_ID",
+          "mode": "id"
+        },
+        "text": "=🚨 **URGENT SUPPORT TICKET** 🚨\n\n@here - Immediate attention required!\n\n**Priority:** {{ $json.priority }}\n**Platform:** {{ $json.platform_standardized }}\n**Order #:** {{ $json.order_number || 'N/A' }}\n**Sentiment:** {{ $json.sentiment }}\n\n**Issue:**\n{{ $json.issue_summary }}\n\n**Details:**\n{{ $json.issue_detail }}\n\n**From:** {{ $json.sender_name }}\n\n<https://mail.google.com/mail/#search/{{ $json.thread_id }}|📧 OPEN IN GMAIL IMMEDIATELY>",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "slack-urgent-11",
+      "name": "Urgent Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        2050,
+        500
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "4",
+          "name": "Slack API"
+        }
+      },
+      "notes": "Sends @here alert to urgent channel for critical tickets"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Error handler - log failed items to Airtable\nconst errorData = $input.all();\nconst errorItems = [];\n\nfor (const item of errorData) {\n  errorItems.push({\n    json: {\n      error_timestamp: new Date().toISOString(),\n      workflow_id: $workflow.id,\n      workflow_name: $workflow.name,\n      node_name: item.error?.node?.name || 'Unknown',\n      error_message: item.error?.message || 'Unknown error',\n      error_stack: item.error?.stack || '',\n      input_data: JSON.stringify(item.json || {}),\n      retry_count: 0,\n      status: 'Failed'\n    }\n  });\n}\n\nreturn errorItems;"
+      },
+      "id": "error-handler-12",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1250,
+        600
+      ],
+      "notes": "Captures errors for logging and retry"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "YOUR_AIRTABLE_BASE_ID",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Intake Errors",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Error Timestamp": "={{ $json.error_timestamp }}",
+            "Workflow ID": "={{ $json.workflow_id }}",
+            "Workflow Name": "={{ $json.workflow_name }}",
+            "Node Name": "={{ $json.node_name }}",
+            "Error Message": "={{ $json.error_message }}",
+            "Error Stack": "={{ $json.error_stack }}",
+            "Input Data": "={{ $json.input_data }}",
+            "Retry Count": "={{ $json.retry_count }}",
+            "Status": "={{ $json.status }}"
+          }
+        }
+      },
+      "id": "airtable-error-13",
+      "name": "Log Error to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [
+        1450,
+        600
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "3",
+          "name": "Airtable Token"
+        }
+      },
+      "notes": "Logs failed entries to Intake Errors table"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "channel": {
+          "__rl": true,
+          "value": "YOUR_ERROR_SLACK_CHANNEL_ID",
+          "mode": "id"
+        },
+        "text": "=⚠️ **Email Automation Error**\n\n**Time:** {{ $json.error_timestamp }}\n**Node:** {{ $json.node_name }}\n**Error:** {{ $json.error_message }}\n\n**Input Data:**\n```\n{{ $json.input_data }}\n```\n\nPlease review and retry if necessary.",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "slack-error-14",
+      "name": "Error Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.1,
+      "position": [
+        1650,
+        600
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "4",
+          "name": "Slack API"
+        }
+      },
+      "notes": "Alerts team in Slack when workflow encounters errors"
+    }
+  ],
+  "connections": {
+    "Gmail Trigger - Support Inbox": {
+      "main": [
+        [
+          {
+            "node": "Text Cleanup & Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text Cleanup & Extraction": {
+      "main": [
+        [
+          {
+            "node": "Regex Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Regex Extractor": {
+      "main": [
+        [
+          {
+            "node": "AI Classification (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Classification (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Merge AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge AI Response": {
+      "main": [
+        [
+          {
+            "node": "Filter Platform Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Platform Notifications": {
+      "main": [
+        [
+          {
+            "node": "Upsert to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert to Airtable": {
+      "main": [
+        [
+          {
+            "node": "Apply Gmail Label",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Gmail Label": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check if Urgent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Urgent": {
+      "main": [
+        [
+          {
+            "node": "Urgent Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Log Error to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error to Airtable": {
+      "main": [
+        [
+          {
+            "node": "Error Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler-12"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-07T00:00:00.000Z",
+      "updatedAt": "2025-01-07T00:00:00.000Z",
+      "id": "email-automation",
+      "name": "Email Automation"
+    },
+    {
+      "createdAt": "2025-01-07T00:00:00.000Z",
+      "updatedAt": "2025-01-07T00:00:00.000Z",
+      "id": "support",
+      "name": "Support"
+    },
+    {
+      "createdAt": "2025-01-07T00:00:00.000Z",
+      "updatedAt": "2025-01-07T00:00:00.000Z",
+      "id": "airtable",
+      "name": "Airtable"
+    },
+    {
+      "createdAt": "2025-01-07T00:00:00.000Z",
+      "updatedAt": "2025-01-07T00:00:00.000Z",
+      "id": "ai",
+      "name": "AI"
+    }
+  ],
+  "pinData": {},
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "legacy-wine-liquor-support-automation"
+  },
+  "id": "legacy-wine-liquor-support-automation",
+  "createdAt": "2025-01-07T00:00:00.000Z",
+  "updatedAt": "2025-01-07T00:00:00.000Z"
+}
