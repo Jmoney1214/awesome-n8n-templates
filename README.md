@@ -276,6 +276,12 @@ Check out my [n8n Twitter Thread Fetcher workflow](https://n8n.io/workflows/4088
 | Email Subscription Service with n8n Forms, Airtable and AI | Manages email subscriptions with n8n Forms, stores data in Airtable, and uses AI for processing. | Marketing/Communication | [Link to Template](Forms_and_Surveys/Email%20Subscription%20Service%20with%20n8n%20Forms,%20Airtable%20and%20AI.json) |
 | Qualifying Appointment Requests with AI & n8n Forms | Uses AI to qualify and process appointment requests submitted through n8n Forms. | Sales/Support | [Link to Template](Forms_and_Surveys/Qualifying%20Appointment%20Requests%20with%20AI%20&%20n8n%20Forms.json) |
 
+### Finance & Accounting
+
+| Title | Description | Department | Link |
+|-------|-------------|------------|------|
+| Bank Transaction Categorizer with Dynamic Visual Dashboard | Transforms bank transaction data into an interactive visual dashboard with automated categorization, spending analysis, trend charts, and vendor breakdowns. Features include real-time metrics (total expenses, revenue, cash flow), category pie charts, monthly bar charts, trend lines, top vendor tables, filtering capabilities, and CSV export. Perfect for small business owners, accountants, and financial analysts who need quick insights from bank statements. | Finance/Accounting | [Link to Template](Finance_and_Accounting/Bank%20Transaction%20Categorizer%20with%20Dynamic%20Visual%20Dashboard.json) |
+
 ### AI Research, RAG, and Data Analysis
 
 | Workflow Title | Description | Department | Link to Template |
