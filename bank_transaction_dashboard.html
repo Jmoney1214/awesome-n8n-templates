@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Transaction Analysis Dashboard - Aug-Oct 2024</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 3em;
+            margin-bottom: 10px;
+            font-weight: 800;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.2em;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .metric-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.25);
+        }
+
+        .metric-label {
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+        }
+
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .metric-value.negative {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .metric-value.positive {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(550px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .chart-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 25px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chart-title::before {
+            content: '';
+            width: 4px;
+            height: 24px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 2px;
+        }
+
+        .full-width-chart {
+            grid-column: 1 / -1;
+        }
+
+        .table-container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow-x: auto;
+            margin-bottom: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 18px 15px;
+            text-align: left;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 1px;
+            position: sticky;
+            top: 0;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        tr:hover {
+            background: linear-gradient(90deg, #f8f9ff, #fff);
+        }
+
+        .amount {
+            font-weight: 700;
+            color: #e74c3c;
+            font-size: 1.1em;
+        }
+
+        .category-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .summary-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+
+        .summary-item {
+            padding: 20px;
+            background: linear-gradient(135deg, #f8f9ff, #fff);
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .summary-item h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .summary-item ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .summary-item li {
+            padding: 8px 0;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #eee;
+        }
+
+        .summary-item li:last-child {
+            border-bottom: none;
+        }
+
+        .summary-item .value {
+            font-weight: 700;
+            color: #e74c3c;
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .metric-value {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💰 Financial Dashboard</h1>
+            <p>Comprehensive Bank Transaction Analysis | August - October 2024</p>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Total Expenses</div>
+                <div class="metric-value negative">$96,064.48</div>
+                <p style="margin-top: 10px; color: #999; font-size: 0.9em;">Repeated vendors only</p>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Misc One-Time</div>
+                <div class="metric-value negative">$110,126.97</div>
+                <p style="margin-top: 10px; color: #999; font-size: 0.9em;">~105 transactions</p>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Total Cash Out</div>
+                <div class="metric-value negative">$206,191.45</div>
+                <p style="margin-top: 10px; color: #999; font-size: 0.9em;">All accounts combined</p>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Deposits (Revenue)</div>
+                <div class="metric-value positive">$11,558.60</div>
+                <p style="margin-top: 10px; color: #999; font-size: 0.9em;">Generic deposits</p>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Financing Inflows</div>
+                <div class="metric-value" style="background: linear-gradient(135deg, #f39c12, #e67e22); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">$22,500.00</div>
+                <p style="margin-top: 10px; color: #999; font-size: 0.9em;">Headway advances</p>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Avg Monthly Expense</div>
+                <div class="metric-value">$68,730.48</div>
+                <p style="margin-top: 10px; color: #999; font-size: 0.9em;">3-month average</p>
+            </div>
+        </div>
+
+        <div class="summary-section">
+            <div class="chart-title">📊 Category Breakdown Summary</div>
+            <div class="summary-grid">
+                <div class="summary-item">
+                    <h3>💼 Payroll & Labor</h3>
+                    <ul>
+                        <li><span>ADP Wages</span><span class="value">$11,539.46</span></li>
+                        <li><span>Payroll Taxes</span><span class="value">$2,922.06</span></li>
+                        <li><span>ADP Fees</span><span class="value">$139.99</span></li>
+                        <li style="border-top: 2px solid #667eea; margin-top: 5px; padding-top: 10px;">
+                            <span><strong>Subtotal</strong></span>
+                            <span class="value"><strong>$14,601.51</strong></span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="summary-item">
+                    <h3>🏦 Loans & Financing</h3>
+                    <ul>
+                        <li><span>Headway Payments</span><span class="value">$22,791.76</span></li>
+                        <li><span>SBA Fees</span><span class="value">$5,000.00</span></li>
+                        <li style="border-top: 2px solid #667eea; margin-top: 5px; padding-top: 10px;">
+                            <span><strong>Subtotal</strong></span>
+                            <span class="value"><strong>$27,791.76</strong></span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="summary-item">
+                    <h3>📦 Shipping & Logistics</h3>
+                    <ul>
+                        <li><span>WeShipExpress</span><span class="value">$9,442.45</span></li>
+                        <li><span>UPS</span><span class="value">$401.64</span></li>
+                        <li style="border-top: 2px solid #667eea; margin-top: 5px; padding-top: 10px;">
+                            <span><strong>Subtotal</strong></span>
+                            <span class="value"><strong>$9,844.09</strong></span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="summary-item">
+                    <h3>🏛️ Taxes</h3>
+                    <ul>
+                        <li><span>FL Sales Tax</span><span class="value">$10,959.06</span></li>
+                        <li><span>Payroll Taxes</span><span class="value">$2,922.06</span></li>
+                        <li style="border-top: 2px solid #667eea; margin-top: 5px; padding-top: 10px;">
+                            <span><strong>Subtotal</strong></span>
+                            <span class="value"><strong>$13,881.12</strong></span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="summary-item">
+                    <h3>💳 Owner/Card Payments</h3>
+                    <ul>
+                        <li><span>Capital One</span><span class="value">~$12,000.00</span></li>
+                        <li><span>AMEX</span><span class="value">~$5,397.00</span></li>
+                        <li><span>Bank of America</span><span class="value">~$2,274.00</span></li>
+                        <li style="border-top: 2px solid #667eea; margin-top: 5px; padding-top: 10px;">
+                            <span><strong>Subtotal</strong></span>
+                            <span class="value"><strong>~$19,671.00</strong></span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="summary-item">
+                    <h3>💻 SaaS & Software</h3>
+                    <ul>
+                        <li><span>OpenAI</span><span class="value">~$730.00</span></li>
+                        <li><span>Zapier</span><span class="value">$159.96</span></li>
+                        <li><span>GoDaddy</span><span class="value">$137.89</span></li>
+                        <li><span>Adobe</span><span class="value">~$70.00</span></li>
+                        <li><span>Airtable</span><span class="value">$48.00</span></li>
+                        <li style="border-top: 2px solid #667eea; margin-top: 5px; padding-top: 10px;">
+                            <span><strong>Subtotal</strong></span>
+                            <span class="value"><strong>~$1,145.85</strong></span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-title">📊 Expense Categories</div>
+                <canvas id="categoryChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">📅 Monthly Trends</div>
+                <canvas id="monthlyChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container full-width-chart">
+            <div class="chart-title">📈 Top Categories Over Time</div>
+            <canvas id="trendChart" style="max-height: 400px;"></canvas>
+        </div>
+
+        <div class="table-container">
+            <div class="chart-title">🏆 Top 20 Repeated Vendors (Aug-Oct 2024)</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Vendor / Description</th>
+                        <th>Category</th>
+                        <th>Aug</th>
+                        <th>Sep</th>
+                        <th>Oct</th>
+                        <th>3-Month Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td><strong>HEADWAYCAPITAL (payments)</strong></td>
+                        <td><span class="category-badge">Loan Payment</span></td>
+                        <td>$8,112.72</td>
+                        <td>$7,236.49</td>
+                        <td>$7,442.55</td>
+                        <td class="amount">$22,791.76</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td><strong>Capital One Mobile PMT</strong></td>
+                        <td><span class="category-badge">Owner/Card</span></td>
+                        <td>~$6,000.00</td>
+                        <td>~$4,000.00</td>
+                        <td>~$2,000.00</td>
+                        <td class="amount">~$12,000.00</td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td><strong>ADP WAGE PAY</strong></td>
+                        <td><span class="category-badge">Payroll</span></td>
+                        <td>$4,840.93</td>
+                        <td>$3,929.67</td>
+                        <td>$2,768.86</td>
+                        <td class="amount">$11,539.46</td>
+                    </tr>
+                    <tr>
+                        <td>4</td>
+                        <td><strong>FLA DEPT REVENUE (Sales Tax)</strong></td>
+                        <td><span class="category-badge">Sales Tax</span></td>
+                        <td>$4,670.44</td>
+                        <td>$3,653.46</td>
+                        <td>$2,635.16</td>
+                        <td class="amount">$10,959.06</td>
+                    </tr>
+                    <tr>
+                        <td>5</td>
+                        <td><strong>WESHIPEXPRESS</strong></td>
+                        <td><span class="category-badge">Shipping</span></td>
+                        <td>$4,378.82</td>
+                        <td>$5,063.63</td>
+                        <td>$0.00</td>
+                        <td class="amount">$9,442.45</td>
+                    </tr>
+                    <tr>
+                        <td>6</td>
+                        <td><strong>AMEX EPAYMENT</strong></td>
+                        <td><span class="category-badge">Owner/Card</span></td>
+                        <td>$1,799.00</td>
+                        <td>$1,799.00</td>
+                        <td>$1,799.00</td>
+                        <td class="amount">~$5,397.00</td>
+                    </tr>
+                    <tr>
+                        <td>7</td>
+                        <td><strong>SBA FEES IN PROC</strong></td>
+                        <td><span class="category-badge">SBA Fees</span></td>
+                        <td>$2,500.00</td>
+                        <td>$2,500.00</td>
+                        <td>$0.00</td>
+                        <td class="amount">$5,000.00</td>
+                    </tr>
+                    <tr>
+                        <td>8</td>
+                        <td><strong>ADP Tax (various)</strong></td>
+                        <td><span class="category-badge">Payroll Tax</span></td>
+                        <td>$1,190.31</td>
+                        <td>$1,074.46</td>
+                        <td>$657.29</td>
+                        <td class="amount">$2,922.06</td>
+                    </tr>
+                    <tr>
+                        <td>9</td>
+                        <td><strong>FPL DIRECT DEBIT</strong></td>
+                        <td><span class="category-badge">Utilities</span></td>
+                        <td>$0.00</td>
+                        <td>$1,181.99</td>
+                        <td>$1,175.79</td>
+                        <td class="amount">$2,357.78</td>
+                    </tr>
+                    <tr>
+                        <td>10</td>
+                        <td><strong>Bank of America (MC/VISA)</strong></td>
+                        <td><span class="category-badge">Owner/Card</span></td>
+                        <td>$778.00</td>
+                        <td>$0.00</td>
+                        <td>$1,496.00</td>
+                        <td class="amount">~$2,274.00</td>
+                    </tr>
+                    <tr>
+                        <td>11</td>
+                        <td><strong>Huntington Banks IL Payment</strong></td>
+                        <td><span class="category-badge">Bank Fees</span></td>
+                        <td>$624.58</td>
+                        <td>$624.58</td>
+                        <td>$0.00</td>
+                        <td class="amount">$1,249.16</td>
+                    </tr>
+                    <tr>
+                        <td>12</td>
+                        <td><strong>Capital One Auto CarPay</strong></td>
+                        <td><span class="category-badge">Auto</span></td>
+                        <td>$396.57</td>
+                        <td>$396.57</td>
+                        <td>~$400.00</td>
+                        <td class="amount">~$1,200.00</td>
+                    </tr>
+                    <tr>
+                        <td>13</td>
+                        <td><strong>Affirm Inc</strong></td>
+                        <td><span class="category-badge">Financing</span></td>
+                        <td>$0.00</td>
+                        <td>$1,185.08</td>
+                        <td>$0.00</td>
+                        <td class="amount">$1,185.08</td>
+                    </tr>
+                    <tr>
+                        <td>14</td>
+                        <td><strong>OpenAI / ChatGPT</strong></td>
+                        <td><span class="category-badge">SaaS</span></td>
+                        <td>$270.00</td>
+                        <td>$260.00</td>
+                        <td>$200.00</td>
+                        <td class="amount">~$730.00</td>
+                    </tr>
+                    <tr>
+                        <td>15</td>
+                        <td><strong>Allstate Insurance</strong></td>
+                        <td><span class="category-badge">Insurance</span></td>
+                        <td>$0.00</td>
+                        <td>$627.32</td>
+                        <td>$0.00</td>
+                        <td class="amount">$627.32</td>
+                    </tr>
+                    <tr>
+                        <td>16</td>
+                        <td><strong>UPS Bill Center</strong></td>
+                        <td><span class="category-badge">Shipping</span></td>
+                        <td>$401.64</td>
+                        <td>$0.00</td>
+                        <td>$0.00</td>
+                        <td class="amount">$401.64</td>
+                    </tr>
+                    <tr>
+                        <td>17</td>
+                        <td><strong>Jeanie Withdrawal</strong></td>
+                        <td><span class="category-badge">Other</span></td>
+                        <td>$63.95</td>
+                        <td>$203.50</td>
+                        <td>$0.00</td>
+                        <td class="amount">$267.45</td>
+                    </tr>
+                    <tr>
+                        <td>18</td>
+                        <td><strong>PayPal Inc</strong></td>
+                        <td><span class="category-badge">Payments</span></td>
+                        <td>$115.92</td>
+                        <td>~$60.00</td>
+                        <td>~$63.00</td>
+                        <td class="amount">~$239.00</td>
+                    </tr>
+                    <tr>
+                        <td>19</td>
+                        <td><strong>Zapier.com</strong></td>
+                        <td><span class="category-badge">SaaS</span></td>
+                        <td>$79.98</td>
+                        <td>$49.99</td>
+                        <td>$29.99</td>
+                        <td class="amount">$159.96</td>
+                    </tr>
+                    <tr>
+                        <td>20</td>
+                        <td><strong>ADP Payroll Fees</strong></td>
+                        <td><span class="category-badge">Payroll Fees</span></td>
+                        <td>$34.41</td>
+                        <td>$46.41</td>
+                        <td>$59.18</td>
+                        <td class="amount">$139.99</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Category data
+        const categoryData = {
+            labels: [
+                'Loan Payments',
+                'Owner/Card Payments',
+                'Payroll & Taxes',
+                'Sales Tax',
+                'Shipping',
+                'Utilities',
+                'SBA Fees',
+                'Bank Fees',
+                'SaaS & Software',
+                'Auto',
+                'Financing',
+                'Insurance',
+                'Other'
+            ],
+            values: [
+                22791.76,
+                19671.00,
+                14601.51,
+                10959.06,
+                9844.09,
+                2357.78,
+                5000.00,
+                1249.16,
+                1145.85,
+                1200.00,
+                1185.08,
+                627.32,
+                506.00
+            ]
+        };
+
+        // Monthly breakdown
+        const monthlyData = {
+            Aug: [8112.72, 6000, 6065.65, 4670.44, 4378.82, 0, 2500, 624.58, 314.39, 396.57, 0, 0, 63.95],
+            Sep: [7236.49, 4000, 5050.54, 3653.46, 5063.63, 1181.99, 2500, 624.58, 414.33, 396.57, 1185.08, 627.32, 203.50],
+            Oct: [7442.55, 2000, 3485.32, 2635.16, 0, 1175.79, 0, 0, 417.13, 400, 0, 0, 0]
+        };
+
+        // Colors
+        const colors = [
+            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+            '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384',
+            '#36A2EB', '#FFCE56', '#9966FF'
+        ];
+
+        // Category Pie Chart
+        const ctxCategory = document.getElementById('categoryChart').getContext('2d');
+        new Chart(ctxCategory, {
+            type: 'doughnut',
+            data: {
+                labels: categoryData.labels,
+                datasets: [{
+                    data: categoryData.values,
+                    backgroundColor: colors,
+                    borderWidth: 3,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            padding: 15,
+                            font: { size: 12, weight: '600' },
+                            generateLabels: function(chart) {
+                                const data = chart.data;
+                                if (data.labels.length && data.datasets.length) {
+                                    return data.labels.map((label, i) => {
+                                        const value = data.datasets[0].data[i];
+                                        const total = data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                        const percent = ((value / total) * 100).toFixed(1);
+                                        return {
+                                            text: `${label} (${percent}%)`,
+                                            fillStyle: data.datasets[0].backgroundColor[i],
+                                            hidden: false,
+                                            index: i
+                                        };
+                                    });
+                                }
+                                return [];
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return label + ': $' + value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' (' + percentage + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Monthly Bar Chart
+        const ctxMonthly = document.getElementById('monthlyChart').getContext('2d');
+        const monthlyTotals = {
+            Aug: monthlyData.Aug.reduce((a, b) => a + b, 0),
+            Sep: monthlyData.Sep.reduce((a, b) => a + b, 0),
+            Oct: monthlyData.Oct.reduce((a, b) => a + b, 0)
+        };
+
+        new Chart(ctxMonthly, {
+            type: 'bar',
+            data: {
+                labels: ['August', 'September', 'October'],
+                datasets: [{
+                    label: 'Total Expenses',
+                    data: [monthlyTotals.Aug, monthlyTotals.Sep, monthlyTotals.Oct],
+                    backgroundColor: ['rgba(255, 99, 132, 0.8)', 'rgba(54, 162, 235, 0.8)', 'rgba(255, 206, 86, 0.8)'],
+                    borderColor: ['rgb(255, 99, 132)', 'rgb(54, 162, 235)', 'rgb(255, 206, 86)'],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return 'Total: $' + context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toLocaleString();
+                            },
+                            font: { weight: '600' }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: { weight: '600' }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+
+        // Trend Line Chart - Top 6 categories
+        const ctxTrend = document.getElementById('trendChart').getContext('2d');
+        const topCategories = categoryData.labels.slice(0, 6);
+        const trendDatasets = topCategories.map((category, idx) => ({
+            label: category,
+            data: [monthlyData.Aug[idx], monthlyData.Sep[idx], monthlyData.Oct[idx]],
+            borderColor: colors[idx],
+            backgroundColor: colors[idx] + '40',
+            tension: 0.4,
+            fill: true,
+            borderWidth: 3,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            pointBackgroundColor: colors[idx],
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+        }));
+
+        new Chart(ctxTrend, {
+            type: 'line',
+            data: {
+                labels: ['August', 'September', 'October'],
+                datasets: trendDatasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            padding: 20,
+                            font: { size: 12, weight: '600' },
+                            usePointStyle: true,
+                            pointStyle: 'circle'
+                        }
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        titleFont: { size: 14, weight: 'bold' },
+                        bodyFont: { size: 13 },
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': $' + context.parsed.y.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toLocaleString();
+                            },
+                            font: { weight: '600' }
+                        },
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            font: { weight: '600' }
+                        },
+                        grid: {
+                            display: false
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
